@@ -322,6 +322,7 @@ class pst(ppm):
 
         self.alphabet_size = alphabet_size
         self.d = d
+        self.kl_threshold = kl_threshold
 
         if freq_threshold == None:
             freq_threshold = 0.1*alphabet_size
