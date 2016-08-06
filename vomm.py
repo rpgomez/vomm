@@ -241,6 +241,13 @@ class ppm:
 
         return new_data
 
+    def __str__(self):
+        """ Implements a string representation to return the parameters of this model. """
+
+        return "\n".join(["alphabet size: %d" % self.alphabet_size,
+                          "context length d: %d" % self.d,
+                          "Size of model: %d" % len(self.pdf_dict)])
+
 def kullback_leibler_test(pdfs,s,threshold):
     """Takes a dictionary pdfs where key is context s and value is the
     probability distribution Pr( | s), a context, and a
@@ -367,3 +374,13 @@ def class pst(ppm):
         self.generate_fast_lookup()
 
         return
+
+    def __str__(self):
+        """ Implements a string representation to return the parameters of this model. """
+
+        return "\n".join(["alphabet size: %d" % self.alphabet_size,
+                          "context length d: %d" % self.d,
+                          "Size of model: %d" % len(self.pdf_dict),
+                          "Frequency threshold: %f" % self.freq_threshold,
+                          "Meaning threshold: %f" % self.meaning_threshold,
+                          "Kullback-Leibler threshold: %f" % self.kl_threshold])
