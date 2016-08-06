@@ -241,3 +241,129 @@ class ppm:
 
         return new_data
 
+def kullback_leibler_test(pdfs,s,threshold):
+    """Takes a dictionary pdfs where key is context s and value is the
+    probability distribution Pr( | s), a context, and a
+    Kullback-Leibler threshold value and returns True (passed) or
+    False (failed).
+    """
+
+    if s == ():
+        # Null context always passes.
+        return True
+
+    p = pdfs[s]
+    q = pdfs[s[1:]]
+
+    logpq = np.log(p/q)
+    logpq[q == 0.0] = 1000
+    logpq[p == 0.0] = 0.0
+
+    kl_value = (p*logpq).sum()
+    return kl_value >= threshold
+
+def class pst(ppm):
+    """This is the class to implement the probabilistic suffix tree
+    algorithm.  What distinguishes PST from PPM is that we prune
+    contexts that don't carry sufficient information.
+
+    There are 3 criteria for pruning:
+
+    1. frequency threshold -- if a context does not occur a sufficient number of times in
+    the training data then it's pruned.
+
+    2. meaning_threshold -- if a context's sample probability
+    distribution does not contain a probability that's sufficiently
+    large enough, then the context is pruned.
+
+    3. Kullback-Leibler threshold -- if a context s probability
+    distribution is not sufficiently different enough from the
+    probability distribution of parent suffix s' then the context is
+    pruned.
+
+    """
+
+    def fit(self, training_data, d=4, alphabet_size = None,
+            freq_threshold = None, meaning_threshold = None,
+            kl_threshold = 0.1):
+        """This is the method to call to fit the model to the data.
+        training_data should be a sequence of symbols represented by
+        integers 0 <= x < alphabet size.
+
+        d specifies the largest context sequence we're willing to consider.
+
+        alphabet_size specifies the number of distinct symbols that
+        can be possibly observed. If not specified, the alphabet_size
+        will be inferred from the training data.
+
+        freq_threshold determines the minimum number of times a
+        context has to occur for it to be kept and not pruned. If not
+        set, then we use the value freq_threshold = .1*alphabet_size
+
+        meaning_threshold sets the minimum value for max{ Pr(sigma|s)|
+        sigma)} we're willing to accept for a context s. If not set we
+        use the value 2/alphabet size.
+
+        kl_threshold sets the minimum distance between the probability
+        distributions for child s and suffix parent s' contexts we
+        require for a context s to be kept. If not set, we use the value 0.1
+
+        """
+
+        if alphabet_size == None:
+            alphabet_size = max(training_data) + 1
+
+        self.alphabet_size = alphabet_size
+        self.d = d
+
+        if freq_threshold == None:
+            freq_threshold = 0.1*alphabet_size
+
+        self.freq_threshold = freq_threshold
+
+        if meaning_threshold == None:
+            meaning_threshold = 2.0/alphabet_size
+
+        self.meaning_threshold = meaning_threshold
+
+        counts = count_occurrences(tuple(training_data),d=self.d,
+                                   alphabet_size = self.alphabet_size)
+
+        # Kill all contexts that fail freq_threshold.
+        counts = dict([ (s,counts[s]) for s in counts if counts[s] >= self.freq_threshold])
+
+        self.pdf_dict = compute_ppm_probability(counts)
+
+        # K-L is a harsher threshold than meaning threshold. We'll do it first.
+
+        # Kill all context that fail Kullback-Leibler divergence
+        passed = dict([ (s,kullback_leibler_test(self.pdf_dict,s,self.kl_threshold))
+                        for s in self.pdf_dict ])
+        # propagate failures from parent to children.
+        for k in range(self.d+1):
+            for s in passed:
+                if s == ():
+                    continue
+                if not passed[s[1:]]:
+                    passed[s] = False
+        self.pdf_dict = dict([(s,self.pdf_dict[s]) for s in self.pdf_dict if passed[s] ])
+
+        # Kill all context that fail meaning threshold.
+        passed = dict([ (s,self.pdf_dict[s].max() >= self.meaning_threshold) for s in self.pdf_dict])
+
+        # propagate failures from parent to children.
+        for k in range(self.d+1):
+            for s in passed:
+                if s == ():
+                    continue
+                if not passed[s[1:]]:
+                    passed[s] = False
+        self.pdf_dict = dict([(s,self.pdf_dict[s]) for s in self.pdf_dict if passed[s] ])
+
+
+        self.logpdf_dict = dict([(x,np.log(self.pdf_dict[x])) for x in self.pdf_dict.keys()])
+
+        # For faster look up  when computing logpdf(observed data).
+        self.generate_fast_lookup()
+
+        return
