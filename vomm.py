@@ -337,7 +337,7 @@ class pst(ppm):
                                    alphabet_size = self.alphabet_size)
 
         # Kill all contexts that fail freq_threshold.
-        counts = dict([ (s,counts[s]) for s in counts if counts[s] >= self.freq_threshold])
+        counts = dict([ (s,counts[s]) for s in counts if counts[s].sum() >= self.freq_threshold])
 
         self.pdf_dict = compute_ppm_probability(counts)
 
