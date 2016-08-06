@@ -269,7 +269,7 @@ def kullback_leibler_test(pdfs,s,threshold):
     kl_value = (p*logpq).sum()
     return kl_value >= threshold
 
-def class pst(ppm):
+class pst(ppm):
     """This is the class to implement the probabilistic suffix tree
     algorithm.  What distinguishes PST from PPM is that we prune
     contexts that don't carry sufficient information.
