@@ -292,7 +292,7 @@ class pst(ppm):
 
     def fit(self, training_data, d=4, alphabet_size = None,
             freq_threshold = None, meaning_threshold = None,
-            kl_threshold = 0.1):
+            kl_threshold = 0.01):
         """This is the method to call to fit the model to the data.
         training_data should be a sequence of symbols represented by
         integers 0 <= x < alphabet size.
