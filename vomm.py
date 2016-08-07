@@ -224,22 +224,40 @@ class ppm:
 
         return logprob
 
-    def generate_data(self,length=200):
+    def generate_data(self,prefix=None, length=200):
         """Generates data from the fitted model.
-        length determines the length of symbols generated.
 
-        It returns the data as an array of symbols represented as
-        integers 0 <=x < alphabet_size. """
+        The length parameter determines how many symbols to generate.
 
-        new_data = np.zeros(length,dtype=np.int)
+        prefix is an optional sequence of symbols to be appended to,
+        in other words, the prefix sequence is treated as a set of
+        symbols that were previously "generated" that are going to be
+        appended by an additional "length" number of symbols.
 
-        for t in range(len(new_data)):
+        The default value of None indicates that no such prefix
+        exists. We're going to be generating symbols starting from the
+        null context.
+
+        It returns the generated data as an array of symbols
+        represented as integers 0 <=x < alphabet_size.
+
+        """
+
+        if prefix != None:
+            new_data = np.zeros(len(prefix) + length,dtype=np.int)
+            new_data[:len(prefix)] = prefix
+            start = len(prefix)
+        else:
+            new_data = np.zeros(length,dtype=np.int)
+            start = 0
+
+        for t in range(start,len(new_data)):
             chunk = tuple(new_data[max(t-self.d,0):t])
             context = find_largest_context(chunk,self.context_child,self.d)
             new_symbol = np.random.choice(self.alphabet_size,p=self.pdf_dict[context])
             new_data[t] = new_symbol
 
-        return new_data
+        return new_data[start:]
 
     def __str__(self):
         """ Implements a string representation to return the parameters of this model. """
