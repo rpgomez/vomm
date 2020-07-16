@@ -9,8 +9,8 @@ the Journal of Artificial Intelligence Research 22 (2004) 385-421.
 
 Details
 =======
-The algorithms are implemented in a python module called vomm.py
-(Variable Order Markov Models) with 2 classe, ppm and pst.
+The 2 algorithms (PPM, PST) are implemented in a python module called vomm.py
+(Variable Order Markov Models) with 2 variant classes for PPM and and 2 variant classes for PST.
 
 Using either class to learn a model consists of several steps:
 
@@ -45,8 +45,22 @@ my_model.generate_data(length=300)
 
 To print out the numerical parameters of the learned model, just use the print statement/function like so:
 ```{python}
-print my_model
+print(my_model)
 ```
+
+Variants
+========
+
+There are 2 variants of the PPM algorithm:
+
+1. ppm -- this is an appropriate class to use when the size of the alphabet is relatively small, for example alphabet size < 256, i.e. an alphabet of bytes.
+
+2. PPM_words -- this is an appropriate class to use when the size of the alphabet is large, for example a vocabulary of words  ~ 2**15. This class implements a memory efficient implementation of the look up table for Pr(symbol|context).
+
+There are 2 variants of the PST algorithm:
+
+1. pst -- a class to use in situations similar to ppm.
+2. pst_JS -- this class is for the same regime as pst, but it implements a different pruning solution for contexts: it makes use of Jensen-Shannon Entropy to decide if the probability distribution of a longer context is sufficiently different than the probability distribution of its shorter context parent. One advantage of this class is that it autodetermine an appropriate threshold to use if the user doesn't know what to to use. 
 
 Internals
 =========
@@ -84,16 +98,14 @@ Installation
 ===========
 
 This is a python module which is installed by using a distutils based
-install script setup.py.  Installation consists of:
+install script setup.py.  Installation consists of either:
 
 ```
 python setup.py install
 ```
 
-If the module needs to be installed somewhere other than the default
-python module installation directory you can run the script as
-follows:
+or
 
 ```
-python setup.py install --prefix=/desired/directory
+pip install .
 ```
