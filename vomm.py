@@ -4,7 +4,33 @@ Order Markov Models" by Ron Begleiter, Ran El-Yaniv, and Golan Yona in
 the Journal of Artificial Intelligence Research 22 (2004) 385-421.  """
 
 import numpy as np
+import scipy.stats as stats
 from collections import Counter, defaultdict
+
+def find_elbow(S):
+    """Finds the elbow in the graph S. Make sure S has been
+    presorted before calling this function and that it is
+    a numpy array"""
+
+    Sp = S - S[0]
+    N = Sp.shape[0]-1
+    SN = Sp[-1]
+    M = SN/N
+    R = (SN**2 + N**2)**0.5
+    sintheta = SN/R
+    costheta = N/R
+    x = np.arange(Sp.shape[0])
+    y = Sp
+    # xp = x*costheta + y*sintheta # Don't need it.
+    yp = y*costheta - x*sintheta
+    yp = np.abs(yp)
+    elbow = yp.argmax()
+    return elbow
+
+def JSD(P, Q):
+    """Computes the Jensen-Shannon Divergence between distributions P and Q. """
+    M = 0.5 * (P + Q)
+    return 0.5 * (stats.entropy(P, M) + stats.entropy(Q, M))
 
 def find_contexts(training_data, d= 4):
     """
@@ -288,6 +314,23 @@ def kullback_leibler_test(pdfs,s,threshold):
     kl_value = (p*logpq).sum()
     return kl_value >= threshold
 
+def jensen_shannon_test(pdfs,s,threshold):
+    """Takes a dictionary pdfs where key is context s and value is the
+    probability distribution Pr( | s), a context, and a
+    Jensen-Shannon divergence threshold value and returns True (passed) or
+    False (failed).
+    """
+
+    if s == ():
+        # Null context always passes.
+        return True
+
+    p = pdfs[s]
+    q = pdfs[s[1:]]
+    js_value = JSD(p,q)
+    return js_value >= threshold
+
+
 class pst(ppm):
     """This is the class to implement the probabilistic suffix tree
     algorithm.  What distinguishes PST from PPM is that we prune
@@ -404,6 +447,94 @@ class pst(ppm):
                           "Frequency threshold: %f" % self.freq_threshold,
                           "Meaning threshold: %f" % self.meaning_threshold,
                           "Kullback-Leibler threshold: %f" % self.kl_threshold])
+
+
+class pst_JS(ppm):
+    """This is the class to implement the probabilistic suffix tree
+    algorithm.  What distinguishes PST from PPM is that we prune
+    contexts that don't carry sufficient information.
+
+    There is 1 criteria for pruning:
+
+    Jensen-Shannon threshold -- if a context s probability
+    distribution is not sufficiently different enough from the
+    probability distribution of parent suffix s' then the context is
+    pruned.
+
+    """
+
+    def fit(self, training_data, d=4, alphabet_size = None,
+            js_threshold = None):
+        """This is the method to call to fit the model to the data.
+        training_data should be a sequence of symbols represented by
+        integers 0 <= x < alphabet size.
+
+        d specifies the largest context sequence we're willing to consider.
+
+        alphabet_size specifies the number of distinct symbols that
+        can be possibly observed. If not specified, the alphabet_size
+        will be inferred from the training data.
+
+        js_threshold sets the minimum distance between the probability
+        distributions for child s and suffix parent s' contexts we
+        require for a context s to be kept. If not set, we autodetermine it.
+
+        """
+
+        if alphabet_size == None:
+            alphabet_size = max(training_data) + 1
+
+        self.alphabet_size = alphabet_size
+        self.d = d
+
+        counts = count_occurrences(tuple(training_data),d=self.d,
+                                   alphabet_size = self.alphabet_size)
+
+        self.pdf_dict = compute_ppm_probability(counts)
+
+        if js_threshold == None:
+            # we need to determine it
+            contexts = list(counts.keys())
+            scores = {}
+            for child in contexts:
+                if len(child) > 1:
+                    parent = child[1:]
+                    scores[(child,parent)] = JSD(self.pdf_dict[parent],self.pdf_dict[child])
+
+            sorted_scores = np.sort(np.array(list(scores.values())))
+            elbow = find_elbow(sorted_scores)
+            js_threshold = sorted_scores[elbow]
+
+        self.js_threshold = js_threshold
+
+        # JS threshold
+        passed = dict([ (s,jensen_shannon_test(self.pdf_dict,s,self.js_threshold))
+                        for s in self.pdf_dict ])
+        # propagate failures from parent to children.
+        for k in range(self.d+1):
+            for s in passed:
+                if s == ():
+                    continue
+                if not passed[s[1:]]:
+                    passed[s] = False
+        self.pdf_dict = dict([(s,self.pdf_dict[s]) for s in self.pdf_dict if passed[s] ])
+
+        self.logpdf_dict = dict([(x,np.log(self.pdf_dict[x])) for x in self.pdf_dict.keys()])
+
+        # For faster look up  when computing logpdf(observed data).
+        self.generate_fast_lookup()
+
+        return
+
+    def __str__(self):
+        """ Implements a string representation to return the parameters of this model. """
+
+        return "\n".join(["alphabet size: %d" % self.alphabet_size,
+                          "context length d: %d" % self.d,
+                          "Size of model: %d" % len(self.pdf_dict),
+                          "Jensen Shannon threshold: %f" % self.js_threshold])
+
+
 def construct_counts_dictionary(observed_sequence,d=4):
     """Constructs the dictionary of observed counts of words following 
     contexts at most d words long. 
