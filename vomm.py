@@ -4,6 +4,7 @@ Order Markov Models" by Ron Begleiter, Ran El-Yaniv, and Golan Yona in
 the Journal of Artificial Intelligence Research 22 (2004) 385-421.  """
 
 import numpy as np
+from collections import Counter, defaultdict
 
 def find_contexts(training_data, d= 4):
     """
@@ -403,3 +404,204 @@ class pst(ppm):
                           "Frequency threshold: %f" % self.freq_threshold,
                           "Meaning threshold: %f" % self.meaning_threshold,
                           "Kullback-Leibler threshold: %f" % self.kl_threshold])
+def construct_counts_dictionary(observed_sequence,d=4):
+    """Constructs the dictionary of observed counts of words following 
+    contexts at most d words long. 
+    
+    observed_sequence should be a sequence of type integer of non-negative integers.
+    Each integer corresponds to some word in the vocabulary.
+    """
+    
+    counts = defaultdict(Counter)
+    N = len(observed_sequence)
+    
+    for t in range(N):
+        obs = observed_sequence[t]
+        for l in range(0,d+1):
+            if t - l < 0:
+                break
+            context = observed_sequence[t-l:t]
+            counts[context][obs] +=1
+    
+    return counts
+            
+def construct_prob_dictionary(counts_dictionary,vocabulary_size):
+    """Computes the memory efficient dictionary word| context probabilities"""
+
+    V = vocabulary_size
+    
+    probs_dictionary = dict()
+    for context in counts_dictionary:
+        local_list = counts_dictionary[context]
+        total_count = sum(list(local_list.values()))
+        
+        R = len(local_list)
+        if R == V:
+            omega = 1.0
+        else:
+            omega = (1+ total_count)/(2 + total_count)
+            
+        probs_dictionary[context] = defaultdict(float)
+        
+        local_probs = defaultdict(float)
+        for word in local_list:
+            c_i = local_list[word]
+            pr = c_i/total_count * omega
+            local_probs[word] = pr
+        
+        if R < V:
+            local_probs[None] = (1.0 - omega)/(V-R)
+        else:
+            local_probs[None] = 0.0
+        
+        probs_dictionary[context] = local_probs
+    
+    return probs_dictionary
+
+def generate_log_pdf_dict(probs_dictionary):
+    """Computes the log likelihood dictionary
+    log (Pr(symbol|context)) from the probs_dictionary"""
+    
+    log_pdf_dict = {}
+    for context in probs_dictionary:
+        local_pdf_list = probs_dictionary[context]
+        local_log_pdf_list = {}
+        for asymbol in local_pdf_list:
+            local_log_pdf_list[asymbol] = np.log(local_pdf_list[asymbol])
+            
+        log_pdf_dict[context] = local_log_pdf_list
+    
+    return log_pdf_dict
+
+class PPM_words:
+    """This class is designed to be memory efficient in the case that the
+    size of the vocabulary is large (>= 2**15 for example).
+
+    """
+    
+    def __init__(self):
+        """ Not much to do here. """
+
+
+    def fit(self,training_data, d=4, alphabet_size = None,verbose=False):
+        """
+        This is the method to call to fit the model to the data.
+        training_data should be a sequence of symbols represented by
+        integers 0 <= x < alphabet size.
+
+        d specifies the largest context sequence we're willing to consider.
+
+        alphabet_size specifies the number of distinct symbols that
+        can be possibly observed. If not specified, the alphabet_size
+        will be inferred from the training data.
+        """
+
+        if alphabet_size == None:
+            alphabet_size = max(training_data) + 1
+
+        self.alphabet_size = alphabet_size
+        self.d = d
+
+        training_data = tuple(training_data) # ensure the data are type tuple.
+        counts = construct_counts_dictionary(training_data,d=d)
+        self.pdf_dict = construct_prob_dictionary(counts,alphabet_size)
+
+        self.logpdf_dict = generate_log_pdf_dict(self.pdf_dict)
+
+        # For faster look up  when computing logpdf(observed data).
+        # self.generate_fast_lookup(verbose=verbose)
+
+        return
+
+    def logpdf(self,observed_data,verbose=False):
+        """Call this method after using fitting the model to compute the log of
+        the probability of an observed sequence of data.
+
+        observed_data should be a sequence of symbols represented by
+        integers 0 <= x < alphabet_size. """
+
+        if not verbose:
+            def use_me(x,desc=None):
+                return x
+        else:
+            use_me = tqdm
+
+        temp = tuple(observed_data)
+        # start with the null context and work my way forward.
+
+        logprob = 0.0
+        for t in use_me(range(len(temp)),desc='computing log pdf'):
+            chunk = temp[max(t-self.d,0):t]
+            sigma = temp[t]
+            while len(chunk) > 0:
+                if chunk in self.logpdf_dict:
+                    break
+                else:
+                    chunk = chunk[1:]
+            context = chunk
+            if sigma in self.logpdf_dict[context]:
+                logprob += self.logpdf_dict[context][sigma]
+            else:
+                logprob += self.logpdf_dict[context][None] # Didn't see this symbol with the context
+        return logprob
+
+    def generate_data(self,prefix=None, length=200,verbose=False):
+        """Generates data from the fitted model.
+
+        The length parameter determines how many symbols to generate.
+
+        prefix is an optional sequence of symbols to be appended to,
+        in other words, the prefix sequence is treated as a set of
+        symbols that were previously "generated" that are going to be
+        appended by an additional "length" number of symbols.
+
+        The default value of None indicates that no such prefix
+        exists. We're going to be generating symbols starting from the
+        null context.
+
+        It returns the generated data as an array of symbols
+        represented as integers 0 <=x < alphabet_size.
+
+        """
+
+        if not verbose:
+            def use_me(x):
+                return x
+        else:
+            use_me = tqdm
+
+        if prefix != None:
+            new_data = np.zeros(len(prefix) + length,dtype=np.int)
+            new_data[:len(prefix)] = prefix
+            start = len(prefix)
+        else:
+            new_data = np.zeros(length,dtype=np.int)
+            start = 0
+
+        scratch_pdf = np.zeros(self.alphabet_size)
+        for t in use_me(range(start,len(new_data))):
+            chunk = tuple(new_data[max(t-self.d,0):t])
+            while len(chunk) > 0:
+                if chunk in self.logpdf_dict:
+                    break
+                else:
+                    chunk = chunk[1:]
+            context = chunk
+            
+            scratch_pdf[:] = self.pdf_dict[context][None] # the symbols we didn't see
+            for symbol in self.pdf_dict[context]:
+                if symbol  == None:
+                    continue
+                scratch_pdf[symbol] = self.pdf_dict[context][symbol]
+                
+            new_symbol = np.random.choice(self.alphabet_size,p=scratch_pdf)
+            new_data[t] = new_symbol
+
+        return new_data[start:]
+
+    def __str__(self):
+        """ Implements a string representation to return the parameters of this model. """
+
+        return "\n".join(["alphabet size: %d" % self.alphabet_size,
+                          "context length d: %d" % self.d,
+                          "Size of model: %d" % len(self.pdf_dict)])
