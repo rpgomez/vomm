@@ -7,6 +7,6 @@ setup(name='vomm',
       author='Rod Gomez',
       author_email='armyofthe penguin@gmail.com',
       url='https://github.com/rpgomez/vomm',
-      install_requires=['numpy',],
+      install_requires=['numpy','scipy'],
       py_modules=['vomm'],
      )
